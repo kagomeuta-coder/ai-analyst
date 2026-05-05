@@ -13,11 +13,9 @@ with st.sidebar:
     st.header("⚙️ 設定")
     api_key = st.text_input("Gemini API Keyを入力", type="password")
     st.info("分析を開始するにはAPIキーが必要です。")
-    st.markdown("---")
-    st.markdown("**💡 使い方のアドバイス**\n\n「半導体」のようにフワッとさせるより、「半導体製造装置」や「AI向けデータセンターインフラ」など、解像度を上げて入力すると分析精度が向上します。")
 
 # --- メイン入力エリア ---
-sector = st.text_input("分析したいセクターを入力（例：半導体製造装置、サイバーセキュリティ）")
+sector = st.text_input("分析したいセクターを入力（例：日本の半導体、サイバーセキュリティ）")
 
 # ★統合・進化した最強プロンプト★
 PROMPT_TEMPLATE = f"""
@@ -27,14 +25,11 @@ PROMPT_TEMPLATE = f"""
 
 以下のセクターについて分析してください：【{{sector_name}}】
 
-手順に従って厳密に進めてください。
-
 【ステップ1：マクロ環境と構造変化】
 そのセクターの直近3〜5年の中長期的な構造変化・成長ドライバー・リスク要因・景気感応度を300〜500字程度で整理してください。
-（円安/円高、AI需要、地政学、設備投資サイクル、中国依存度、米中摩擦なども含む）
 
 【ステップ2：有力銘柄の選定】
-指定された市場（米国・日本等）において、現在最も注目すべき有力銘柄を4〜7社選び、選定理由を簡潔に列挙してください。
+指定された市場において、現在最も注目すべき有力銘柄を4〜7社選び、選定理由を簡潔に列挙してください。
 ※時価総額上位だけでなく、成長性・バリュエーション・テーマ性・需給の観点も考慮してください。
 ※セクター判定の幅を広めに取り、バリューチェーン全体や、ADR銘柄、上場直後の銘柄（キオクシア等）も柔軟に対象に含めてください。
 
@@ -44,23 +39,21 @@ PROMPT_TEMPLATE = f"""
 ・PER（予）、PBR（予）、EV/EBITDA
 ・ROE、営業利益率（直近or予想）
 ・売上・営業利益成長率（直近決算＋来期・再来期予想）
-・【追加】理論株価の試算（DCF法またはマルチプルに基づく妥当水準）と、現在の株価との乖離率（アップサイド/ダウンサイド％）
-・配当利回り・自社株買い動向
-・主力製品/サービスの差別化ポイント
-・中国・米国売上比率（概算でも可）
-・株価チャート上の位置（25日・75日線、52週高値更新かどうかなど簡潔に）
+・理論株価の試算（DCF法またはマルチプルに基づく妥当水準）と、現在の株価との乖離率（アップサイド/ダウンサイド％）
+・配当利回り・主力製品の差別化ポイント
+・株価チャート上の位置（25日・75日線など簡潔に）
 
 【ステップ4：ランキングとヒートマップ分析】
-現時点で最も投資魅力が高い順にランキングし、各順位の根拠（成長期待、バリュエーション、需給、テーマ性、リスクのバランス）を簡潔に述べてください。
+現時点で最も投資魅力が高い順にランキングし、各順位の根拠を簡潔に述べてください。
 あわせて、セクター内の「資金循環ヒートマップ」を言語化し、現在どのサブセクターや領域に最も強い買い圧力がかかっているか分析してください。
 
 【ステップ5：シナリオ分析】
-このセクター全体として、今後3年のメインシナリオと、メインシナリオが外れる場合のサブシナリオを2パターン挙げ、それぞれの場合にセクター全体として強気・弱気になる水準感（市場平均に対する相対パフォーマンス予想）を述べてください。
+今後3年のメインシナリオと、サブシナリオを2パターン挙げ、それぞれの場合にセクター全体として強気・弱気になる水準感（市場平均に対する相対パフォーマンス予想）を述べてください。
 
 【ステップ6：目標株価とエントリー戦略】
-上位3銘柄について、12ヶ月後の「目標株価予想」を、強気・弱気・ベースの3シナリオで提示してください。各シナリオの発生確率（仮説）と、エントリーする際の推奨価格帯（押し目買い水準）を具体的に提言してください。
+上位3銘柄について、12ヶ月後の「目標株価予想」を、強気・弱気・ベースの3シナリオで提示してください。発生確率と、エントリーする際の推奨価格帯（押し目買い水準）を具体的に提言してください。
 
-回答は客観的かつ数値根拠をできるだけ多く含め、感情的な表現は避けてプロ向けのトーンで出力してください。
+回答は客観的かつ数値根拠をできるだけ多く含め、プロ向けのトーンで出力してください。
 """
 
 # --- 実行ボタン ---
@@ -73,19 +66,36 @@ if st.button("プロフェッショナル分析を開始"):
         try:
             genai.configure(api_key=api_key)
             
-            # Web検索（グラウンディング）を利用可能なモデルを指定
-            model = genai.GenerativeModel(
-                model_name='gemini-1.5-pro',
-                tools='google_search_retrieval' # リアルタイム検索を有効化する魔法のコード
-            )
+            # ★エラー回避策：使えるモデルを自動で探し出す（1.5系を優先）
+            available_model = None
+            models = [m for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
             
-            with st.spinner(f'シニアアナリストが {today} 時点の最新データをWeb検索中...'):
-                full_prompt = PROMPT_TEMPLATE.format(sector_name=sector)
-                response = model.generate_content(full_prompt)
+            for m in models:
+                if 'gemini-1.5' in m.name:
+                    available_model = m.name
+                    break
+            if not available_model:
+                for m in models:
+                    if 'gemini' in m.name:
+                        available_model = m.name
+                        break
+            
+            if not available_model:
+                st.error("利用可能なモデルが見つかりませんでした。")
+            else:
+                # 自動で見つけたモデルに、Web検索機能（tools）をトッピングする
+                model = genai.GenerativeModel(
+                    model_name=available_model,
+                    tools='google_search_retrieval'
+                )
                 
-                st.success(f"「{sector}」の高度分析が完了しました。")
-                st.markdown(response.text)
-                
+                with st.spinner(f'シニアアナリストが最新データをWeb検索中...（裏側で {available_model} が稼働）'):
+                    full_prompt = PROMPT_TEMPLATE.format(sector_name=sector)
+                    response = model.generate_content(full_prompt)
+                    
+                    st.success(f"「{sector}」の高度分析が完了しました。")
+                    st.markdown(response.text)
+                    
         except Exception as e:
             st.error(f"エラーが発生しました: {e}")
             st.info("※APIキーの入力ミスがないか、またはGoogle側のサーバー状況をご確認ください。")
