@@ -59,15 +59,23 @@ if st.button("プロフェッショナル分析を開始"):
     else:
         try:
             genai.configure(api_key=api_key)
-            available_model = next((m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods and 'gemini' in m.name), None)
             
-            if not available_model:
-                st.error("利用可能なモデルが見つかりません。")
-            else:
-                model = genai.GenerativeModel(available_model)
-                with st.spinner(f'シニアアナリストが {today} 時点のバリューチェーンを精査中...'):
-                    response = model.generate_content(PROMPT_TEMPLATE.format(sector_name=sector))
-                    st.success(f"「{sector}」の高度分析が完了しました。")
-                    st.markdown(response.text)
+            # ★修正箇所1：モデルを最新情報を検索できる「gemini-1.5-pro」などに指定
+            model_name = "gemini-1.5-pro"
+            
+            # ★修正箇所2：Google検索ツール（リアルタイム情報取得）をオンにしてモデルを準備
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                tools='google_search_retrieval' # ←これがインターネット検索を許可する魔法のコードです
+            )
+            
+            with st.spinner(f'シニアアナリストが {today} 時点の最新データをWeb検索中...'):
+                # プロンプトを送信
+                response = model.generate_content(PROMPT_TEMPLATE.format(sector_name=sector))
+                
+                st.success(f"「{sector}」の高度分析が完了しました。")
+                st.markdown(response.text)
+                
         except Exception as e:
             st.error(f"エラー: {e}")
+            st.info("※APIキーの権限や、検索機能に対応していないモデルが原因の可能性があります。")
