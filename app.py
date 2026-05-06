@@ -1,5 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
+from google.generativeai import protos  # ← ★最終奥義のパーツです
 from datetime import datetime
 
 # --- 画面の設定 ---
@@ -66,7 +67,6 @@ if st.button("プロフェッショナル分析を開始"):
         try:
             genai.configure(api_key=api_key)
             
-            # ★エラー回避策：使えるモデルを自動で探し出す（1.5系を優先）
             available_model = None
             models = [m for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
             
@@ -83,13 +83,23 @@ if st.button("プロフェッショナル分析を開始"):
             if not available_model:
                 st.error("利用可能なモデルが見つかりませんでした。")
             else:
-                # ★修正箇所：文字ではなく、正式な「辞書形式（リスト）」でツールを渡すようにしました
+                # ★最終修正箇所：Pythonの誤訳を防ぐため、Googleの生データ(protos)を直接渡す
+                try:
+                    search_tool = protos.Tool(google_search=protos.GoogleSearch())
+                    tools_list = [search_tool]
+                    status_text = f"シニアアナリストが最新データをWeb検索中...（{available_model} ＋ Google検索）"
+                except AttributeError:
+                    # Streamlitの環境が古すぎて検索機能が見つからない場合の安全装置
+                    tools_list = None
+                    status_text = f"シニアアナリストが分析中...（{available_model}）"
+                    st.toast("⚠️ Google検索機能が未対応の環境のため、通常モードで実行します", icon="ℹ️")
+
                 model = genai.GenerativeModel(
                     model_name=available_model,
-                    tools=[{"google_search": {}}]
+                    tools=tools_list
                 )
                 
-                with st.spinner(f'シニアアナリストが最新データをWeb検索中...（裏側で {available_model} が稼働）'):
+                with st.spinner(status_text):
                     full_prompt = PROMPT_TEMPLATE.format(sector_name=sector)
                     response = model.generate_content(full_prompt)
                     
