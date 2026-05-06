@@ -1,6 +1,6 @@
 import streamlit as st
-import google.generativeai as genai
-from google.generativeai import protos  # ← ★最終奥義のパーツです
+from google import genai
+from google.genai import types
 from datetime import datetime
 
 # --- 画面の設定 ---
@@ -65,47 +65,27 @@ if st.button("プロフェッショナル分析を開始"):
         st.warning("セクター名を入力してください。")
     else:
         try:
-            genai.configure(api_key=api_key)
+            # 新しい公式SDKのクライアントを作成
+            client = genai.Client(api_key=api_key)
             
-            available_model = None
-            models = [m for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            # 最新の「gemini-2.5-flash」を直接指定
+            model_name = 'gemini-2.5-flash'
             
-            for m in models:
-                if 'gemini-1.5' in m.name:
-                    available_model = m.name
-                    break
-            if not available_model:
-                for m in models:
-                    if 'gemini' in m.name:
-                        available_model = m.name
-                        break
-            
-            if not available_model:
-                st.error("利用可能なモデルが見つかりませんでした。")
-            else:
-                # ★最終修正箇所：Pythonの誤訳を防ぐため、Googleの生データ(protos)を直接渡す
-                try:
-                    search_tool = protos.Tool(google_search=protos.GoogleSearch())
-                    tools_list = [search_tool]
-                    status_text = f"シニアアナリストが最新データをWeb検索中...（{available_model} ＋ Google検索）"
-                except AttributeError:
-                    # Streamlitの環境が古すぎて検索機能が見つからない場合の安全装置
-                    tools_list = None
-                    status_text = f"シニアアナリストが分析中...（{available_model}）"
-                    st.toast("⚠️ Google検索機能が未対応の環境のため、通常モードで実行します", icon="ℹ️")
-
-                model = genai.GenerativeModel(
-                    model_name=available_model,
-                    tools=tools_list
+            with st.spinner(f'シニアアナリストが最新データをWeb検索中...（{model_name} ＋ Google検索稼働）'):
+                full_prompt = PROMPT_TEMPLATE.format(sector_name=sector)
+                
+                # 新しいSDKのクリーンな書き方でGoogle検索を有効化
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=full_prompt,
+                    config=types.GenerateContentConfig(
+                        tools=[types.Tool(google_search=types.GoogleSearch())]
+                    )
                 )
                 
-                with st.spinner(status_text):
-                    full_prompt = PROMPT_TEMPLATE.format(sector_name=sector)
-                    response = model.generate_content(full_prompt)
-                    
-                    st.success(f"「{sector}」の高度分析が完了しました。")
-                    st.markdown(response.text)
-                    
+                st.success(f"「{sector}」の高度分析が完了しました。")
+                st.markdown(response.text)
+                
         except Exception as e:
             st.error(f"エラーが発生しました: {e}")
-            st.info("※APIキーの入力ミスがないか、またはGoogle側のサーバー状況をご確認ください。")
+            st.info("※APIキーの入力ミスや、Google側の制限をご確認ください。")
