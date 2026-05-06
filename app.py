@@ -83,10 +83,10 @@ if st.button("プロフェッショナル分析を開始"):
             if not available_model:
                 st.error("利用可能なモデルが見つかりませんでした。")
             else:
-                # ★修正箇所：ツール名を 'google_search' に変更しました
+                # ★修正箇所：文字ではなく、正式な「辞書形式（リスト）」でツールを渡すようにしました
                 model = genai.GenerativeModel(
                     model_name=available_model,
-                    tools='google_search'
+                    tools=[{"google_search": {}}]
                 )
                 
                 with st.spinner(f'シニアアナリストが最新データをWeb検索中...（裏側で {available_model} が稼働）'):
